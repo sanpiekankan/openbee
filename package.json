@@ -1,6 +1,6 @@
 {
   "name": "@openbee/openbee",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OpenBee — A hive of specialized AI bees collaborating with unique roles and capacities. Join us to build a user-friendly, strong, and secure AI agent/skills CLI tool!",
   "main": "index.js",
   "scripts": {
