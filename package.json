@@ -1,7 +1,7 @@
 {
   "name": "@openbee/openbee",
   "version": "1.0.0",
-  "description": "OpenBee — A user-friendly, strong, and secure AI agent/skill CLI tool. Join us to build the future of automation!",
+  "description": "OpenBee — A hive of specialized AI bees collaborating with unique roles and capacities. Join us to build a user-friendly, strong, and secure AI agent/skills CLI tool!",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

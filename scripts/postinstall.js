@@ -6,7 +6,8 @@
 const projectInfo = {
   name: "OpenBee",
   description: "Busy as a Bee, Smart as AI, Automated for You",
-  tagline: "Building a user-friendly, strong, and secure AI agent/skill CLI tool.",
+  tagline: "Building a user-friendly, strong, and secure AI agent/skills CLI tool.",
+  collaboration: "A hive of specialized AI bees working in harmony, where every role contributes unique strengths and distinct capacities to make complex tasks happen.",
   github: "https://github.com/sanpiekankan/openbee"
 };
 
@@ -15,7 +16,8 @@ const colors = {
   bright: "\x1b[1m",
   cyan: "\x1b[36m",
   yellow: "\x1b[33m",
-  green: "\x1b[32m"
+  green: "\x1b[32m",
+  magenta: "\x1b[35m"
 };
 
 function displayWelcomeMessage() {
@@ -25,6 +27,7 @@ function displayWelcomeMessage() {
   console.log(`${colors.bright}${colors.yellow}Welcome to ${projectInfo.name}!${colors.reset}`);
   console.log(`${colors.green}${projectInfo.description}${colors.reset}`);
   console.log(`\n${projectInfo.tagline}`);
+  console.log(`\n${colors.magenta}${projectInfo.collaboration}${colors.reset}`);
   console.log(`\n${colors.bright}We are looking for talents to join this open-source project!${colors.reset}`);
   console.log(`Check us out at: ${colors.cyan}${projectInfo.github}${colors.reset}`);
   console.log(`${colors.cyan}${line}${colors.reset}\n`);
