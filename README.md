@@ -29,7 +29,25 @@ npm install @openbee/openbee
 
 ### Usage
 
-OpenBee provides a powerful CLI to interact with your hive:
+OpenBee provides a powerful CLI to interact with your hive.
+
+#### Local Development Testing
+
+If you are developing locally, you can test the features using `tsx`:
+
+- **List available roles:**
+  ```bash
+  npx tsx src/index.ts list
+  ```
+
+- **Summon a bee for a task:**
+  ```bash
+  npx tsx src/index.ts ask researcher "Find information about climate change"
+  ```
+
+#### Production Usage
+
+After installation, you can use the `openbee` command:
 
 - **List available roles:**
   ```bash
