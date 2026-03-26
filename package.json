@@ -1,6 +1,6 @@
 {
   "name": "@openbee/openbee",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OpenBee — Busy as a Bee, Smart as AI, Automated for You. Building a user-friendly, strong, and secure AI agent/skills CLI tool. A hive of specialized AI bees working in harmony, where every role contributes unique strengths and distinct capacities to make complex tasks happen.",
   "type": "module",
   "main": "dist/index.js",
