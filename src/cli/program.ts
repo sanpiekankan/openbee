@@ -2,9 +2,17 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { BeeRegistry } from '../bees/registry.js';
 import { Logger } from 'tslog';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const logger = new Logger({ name: 'CLI' });
 const program = new Command();
+
+// Resolve package.json version
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageJsonPath = path.resolve(__dirname, '../../package.json');
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
 /**
  * Main entry point for the OpenBee CLI.
@@ -16,7 +24,7 @@ export function run() {
   program
     .name('openbee')
     .description('OpenBee — A hive of specialized AI bees collaborating with unique roles.')
-    .version('1.0.3');
+    .version(packageJson.version);
 
   program
     .command('list')
