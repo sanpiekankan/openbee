@@ -16,7 +16,7 @@ export function run() {
   program
     .name('openbee')
     .description('OpenBee — A hive of specialized AI bees collaborating with unique roles.')
-    .version('1.0.1');
+    .version('1.0.3');
 
   program
     .command('list')
