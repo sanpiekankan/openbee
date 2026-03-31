@@ -1,5 +1,6 @@
 import { BeeRole, BeeContext } from './types.js';
 import { Logger } from 'tslog';
+import { LLMClient } from '../infra/llm.js';
 
 const logger = new Logger({ name: 'Bee' });
 
@@ -10,9 +11,11 @@ const logger = new Logger({ name: 'Bee' });
 export abstract class BaseBee {
   protected role: BeeRole;
   protected context: BeeContext;
+  protected llm: LLMClient;
 
-  constructor(role: BeeRole) {
+  constructor(role: BeeRole, llm: LLMClient) {
     this.role = role;
+    this.llm = llm;
     this.context = {
       role,
       history: [{ role: 'system', content: role.systemPrompt }],
@@ -34,8 +37,8 @@ export abstract class BaseBee {
     logger.info(`Bee ${this.role.name} is thinking about: ${input}`);
     this.context.history.push({ role: 'user', content: input });
     
-    // Implementation for LLM interaction would go here
-    const response = `Bee [${this.role.name}]: I am working on "${input}" using my ${this.role.description} capacities.`;
+    // Perform actual LLM interaction
+    const response = await this.llm.chat(this.context.history);
     
     this.context.history.push({ role: 'assistant', content: response });
     return response;

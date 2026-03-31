@@ -1,4 +1,5 @@
 export * from './bees/base.js';
+export * from './bees/bee.js';
 export * from './bees/registry.js';
 export * from './bees/types.js';
 export * from './skills/loader.js';
