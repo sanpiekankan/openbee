@@ -85,17 +85,25 @@ export function run() {
           },
           model: ({ results }) => {
             const modelDefaults: Record<string, string> = {
-              deepseek: 'deepseek-chat',
+              deepseek: 'deepseek-chat', // or deepseek-reasoner
               qwen: 'qwen-max',
-              kimi: 'moonshot-v1-8k',
-              zhipu: 'glm-4',
+              kimi: 'kimi-k2.5',
+              zhipu: 'glm-4-plus',
               openai: 'gpt-4o',
             };
+            const placeholders: Record<string, string> = {
+              deepseek: 'deepseek-chat, deepseek-reasoner',
+              qwen: 'qwen-max, qwen-plus, qwen-turbo',
+              kimi: 'kimi-k2.5, moonshot-v1-8k, moonshot-v1-32k',
+              zhipu: 'glm-4-plus, glm-4-0520, glm-4',
+              openai: 'gpt-4o, gpt-4-turbo, gpt-3.5-turbo',
+            };
             const defaultModel = modelDefaults[results.provider as string] || '';
+            const placeholder = placeholders[results.provider as string] || 'model-name';
 
             return p.text({
               message: 'Enter Model Name:',
-              placeholder: defaultModel || 'model-name',
+              placeholder: placeholder,
               initialValue: config.llm.model || defaultModel,
             });
           },
