@@ -5,6 +5,10 @@ import { Logger } from 'tslog';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import * as p from '@clack/prompts';
+import { ConfigManager } from '../config/manager.js';
+import { LLMClient } from '../infra/llm.js';
+import { Bee } from '../bees/bee.js';
 
 const logger = new Logger({ name: 'CLI' });
 const program = new Command();
@@ -25,6 +29,96 @@ export function run() {
     .name('openbee')
     .description('OpenBee — A hive of specialized AI bees collaborating with unique roles.')
     .version(packageJson.version);
+
+  program
+    .command('config')
+    .description('Configure the OpenBee hive (LLM setup)')
+    .action(async () => {
+      p.intro(chalk.yellow(`${chalk.bold('OpenBee Config')} 🐝`));
+
+      const config = await ConfigManager.load() || { llm: { provider: 'openai', model: 'gpt-4o', apiKey: '', baseUrl: '' } };
+
+      const setup = await p.group(
+        {
+          provider: () =>
+            p.select({
+              message: 'Select LLM Provider:',
+              options: [
+                { value: 'openai', label: 'OpenAI' },
+                { value: 'deepseek', label: 'DeepSeek' },
+                { value: 'qwen', label: 'Qwen (Aliyun)' },
+                { value: 'kimi', label: 'Kimi (Moonshot)' },
+                { value: 'zhipu', label: 'Zhipu AI (GLM)' },
+                { value: 'anthropic', label: 'Anthropic' },
+                { value: 'ollama', label: 'Ollama (Local)' },
+                { value: 'custom', label: 'Custom OpenAI-compatible' },
+              ],
+              initialValue: config.llm.provider,
+            }),
+          apiKey: ({ results }) =>
+            results.provider !== 'ollama'
+              ? p.text({
+                  message: `Enter ${results.provider} API Key:`,
+                  placeholder: 'your-api-key',
+                  initialValue: config.llm.apiKey,
+                })
+              : Promise.resolve(''),
+          baseUrl: ({ results }) => {
+            const defaults: Record<string, string> = {
+              deepseek: 'https://api.deepseek.com',
+              qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+              kimi: 'https://api.moonshot.cn/v1',
+              zhipu: 'https://open.bigmodel.cn/api/paas/v4/',
+              ollama: 'http://localhost:11434/v1',
+            };
+            const defaultUrl = defaults[results.provider as string] || '';
+            
+            if (results.provider === 'openai' || results.provider === 'anthropic') {
+              return Promise.resolve(defaultUrl);
+            }
+
+            return p.text({
+              message: 'Enter Base URL:',
+              placeholder: defaultUrl || 'https://api.your-provider.com/v1',
+              initialValue: config.llm.baseUrl || defaultUrl,
+            });
+          },
+          model: ({ results }) => {
+            const modelDefaults: Record<string, string> = {
+              deepseek: 'deepseek-chat',
+              qwen: 'qwen-max',
+              kimi: 'moonshot-v1-8k',
+              zhipu: 'glm-4',
+              openai: 'gpt-4o',
+            };
+            const defaultModel = modelDefaults[results.provider as string] || '';
+
+            return p.text({
+              message: 'Enter Model Name:',
+              placeholder: defaultModel || 'model-name',
+              initialValue: config.llm.model || defaultModel,
+            });
+          },
+        },
+        {
+          onCancel: () => {
+            p.cancel('Configuration cancelled.');
+            process.exit(0);
+          },
+        }
+      );
+
+      await ConfigManager.save({
+        llm: {
+          provider: setup.provider as string,
+          apiKey: setup.apiKey as string,
+          model: setup.model as string,
+          baseUrl: setup.baseUrl as string,
+        },
+      });
+
+      p.outro(chalk.green('Configuration saved successfully! Hive is ready to work. 🐝'));
+    });
 
   program
     .command('list')
@@ -49,19 +143,35 @@ export function run() {
       const role = BeeRegistry.get(roleId);
 
       if (!role) {
-        console.error(chalk.red(`Error: Bee role "${roleId}" not found in the Hive.`));
+        p.log.error(chalk.red(`Error: Bee role "${roleId}" not found in the Hive.`));
         process.exit(1);
       }
 
-      console.log(chalk.green(`\n🐝 Summoning ${role.name} to work on: "${task}"...`));
-      
-      // Simulating a bee thinking
-      setTimeout(() => {
-        console.log(chalk.cyan(`\n[${role.name}]: I've started working on your request using my specialized capacities.`));
-        console.log(chalk.gray(`  Role: ${role.description}`));
-        console.log(chalk.gray(`  Skills: ${role.skills.join(', ')}`));
-        console.log(chalk.green('\nTask complete! (Simulation mode)'));
-      }, 1000);
+      const config = await ConfigManager.load();
+      if (!config || !config.llm || !config.llm.apiKey) {
+        p.log.error(chalk.red('Error: LLM not configured. Please run "openbee config" first.'));
+        process.exit(1);
+      }
+
+      const s = p.spinner();
+      s.start(chalk.green(`Summoning ${role.name} to work on: "${task}"...`));
+
+      try {
+        const llm = new LLMClient(config.llm);
+        const bee = new Bee(role, llm);
+        const response = await bee.think(task);
+
+        s.stop(chalk.cyan(`[${role.name}] has finished thinking.`));
+        
+        console.log(`\n${chalk.bold(role.name)}:`);
+        console.log(`${response}\n`);
+        
+        p.log.info(chalk.gray(`  Role: ${role.description}`));
+        p.log.info(chalk.gray(`  Skills: ${role.skills.join(', ')}`));
+      } catch (error: any) {
+        s.stop(chalk.red('The bee got confused or ran into an error.'));
+        p.log.error(chalk.red(`Error: ${error.message}`));
+      }
     });
 
   program.parse();
