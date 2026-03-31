@@ -31,7 +31,7 @@ export class LLMClient {
       const response = await this.client.chat.completions.create({
         model: this.config.model,
         messages: messages as any,
-        temperature: 0.7,
+        temperature: this.config.temperature ?? (this.config.model.includes('k2.5') || this.config.model.includes('reasoner') ? 1.0 : 0.7),
       });
 
       const content = response.choices[0]?.message?.content || '';

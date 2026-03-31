@@ -107,6 +107,20 @@ export function run() {
               initialValue: config.llm.model || defaultModel,
             });
           },
+          temperature: ({ results }) => {
+            const model = (results.model as string) || '';
+            const defaultTemp = model.includes('k2.5') || model.includes('reasoner') ? '1.0' : '0.7';
+            return p.text({
+              message: 'Enter Temperature (0.0 - 2.0):',
+              placeholder: defaultTemp,
+              initialValue: config.llm.temperature?.toString() || defaultTemp,
+              validate: (value) => {
+                if (!value) return 'Please enter a value';
+                const num = parseFloat(value);
+                if (isNaN(num) || num < 0 || num > 2) return 'Please enter a number between 0 and 2';
+              }
+            });
+          },
         },
         {
           onCancel: () => {
@@ -118,10 +132,11 @@ export function run() {
 
       await ConfigManager.save({
         llm: {
-          provider: setup.provider as string,
-          apiKey: setup.apiKey as string,
-          model: setup.model as string,
-          baseUrl: setup.baseUrl as string,
+          provider: (setup.provider as string) || '',
+          apiKey: (setup.apiKey as string) || '',
+          model: (setup.model as string) || '',
+          baseUrl: (setup.baseUrl as string) || '',
+          temperature: parseFloat((setup.temperature as string) || '0.7'),
         },
       });
 
