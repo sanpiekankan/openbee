@@ -12,7 +12,7 @@ export interface BeeRole {
 
 export interface BeeContext {
   role: BeeRole;
-  history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+  history: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; tool_call_id?: string; tool_calls?: any[] }>;
   skills: any[]; // Loaded skills
 }
 
@@ -20,5 +20,9 @@ export interface ToolDefinition {
   name: string;
   description: string;
   parameters: any;
+}
+
+export interface BeeTool {
+  definition: ToolDefinition;
   execute: (args: any) => Promise<any>;
 }

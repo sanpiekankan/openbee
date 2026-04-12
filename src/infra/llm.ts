@@ -21,9 +21,12 @@ export class LLMClient {
   }
 
   /**
-   * Send a completion request to the LLM
+   * Send a completion request to the LLM with optional tools
    */
-  async chat(messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>): Promise<string> {
+  async chat(
+    messages: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; tool_call_id?: string }>,
+    tools?: any[]
+  ): Promise<any> {
     try {
       const providerInfo = this.config.provider.toUpperCase();
       logger.info(`Sending request to ${providerInfo} (model: ${this.config.model})...`);
@@ -31,15 +34,16 @@ export class LLMClient {
       const response = await this.client.chat.completions.create({
         model: this.config.model,
         messages: messages as any,
+        tools: tools,
         temperature: this.config.temperature ?? (this.config.model.includes('k2.5') || this.config.model.includes('reasoner') ? 1.0 : 0.7),
       });
 
-      const content = response.choices[0]?.message?.content || '';
-      if (!content) {
+      const choice = response.choices[0];
+      if (!choice || !choice.message) {
         throw new Error(`${providerInfo} returned an empty response.`);
       }
 
-      return content;
+      return choice.message;
     } catch (error: any) {
       const providerInfo = this.config.provider.toUpperCase();
       let errorMessage = error.message;
