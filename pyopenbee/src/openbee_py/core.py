@@ -272,6 +272,15 @@ def _ask_openai_compatible(
     return content
 
 
+def _is_temperature_one_only_error(error_message: str) -> bool:
+    """Return True when provider indicates this model only supports temperature=1."""
+    text = error_message.lower()
+    return (
+        "invalid temperature" in text
+        and "only 1 is allowed" in text
+    ) or "temperature only supports 1" in text
+
+
 def _ask_anthropic(
     role: dict[str, str],
     task: str,
@@ -408,12 +417,26 @@ def ask_openbee(
             temperature=temperature,
             timeout=effective_timeout,
         )
-    return _ask_openai_compatible(
-        role=role,
-        task=task,
-        api_key=api_key,
-        model=model,
-        base_url=base_url,
-        temperature=temperature,
-        timeout=effective_timeout,
-    )
+    try:
+        return _ask_openai_compatible(
+            role=role,
+            task=task,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=temperature,
+            timeout=effective_timeout,
+        )
+    except RuntimeError as exc:
+        # Some models (e.g. certain Kimi reasoning models) only accept temperature=1.
+        if temperature != 1.0 and _is_temperature_one_only_error(str(exc)):
+            return _ask_openai_compatible(
+                role=role,
+                task=task,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                temperature=1.0,
+                timeout=effective_timeout,
+            )
+        raise

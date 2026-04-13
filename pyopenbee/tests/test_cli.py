@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from openbee_py import cli
 from openbee_py.config import get_config_path, load_config, update_llm_config
+from openbee_py.core import ask_openbee
 
 
 class TestOpenBeePyCli(unittest.TestCase):
@@ -73,6 +74,28 @@ class TestOpenBeePyCli(unittest.TestCase):
                 self.assertEqual(config["llm"]["api_key"], "sk-test-legacy")
                 self.assertEqual(config["llm"]["base_url"], "https://api.moonshot.cn/v1")
                 self.assertEqual(config["llm"]["model"], "kimi-k2.5")
+
+    def test_ask_openbee_retries_with_temperature_one(self) -> None:
+        role = {"system_prompt": "x"}
+        with patch(
+            "openbee_py.core._ask_openai_compatible",
+            side_effect=[
+                RuntimeError('request failed: 400 {"error":{"message":"invalid temperature: only 1 is allowed"}}'),
+                "ok",
+            ],
+        ) as mocked:
+            result = ask_openbee(
+                role=role,
+                task="hello",
+                provider="kimi",
+                api_key="k",
+                api_secret="",
+                model="kimi-k2.5",
+                base_url="https://api.moonshot.cn/v1",
+                temperature=0.0,
+            )
+            self.assertEqual(result, "ok")
+            self.assertEqual(mocked.call_count, 2)
 
 
 if __name__ == "__main__":
