@@ -97,7 +97,12 @@ def _interactive_config() -> int:
 
     selected = providers[selection - 1]
     default_model = str(config.get("model") or selected["default_model"])
-    default_base_url = str(config.get("baseUrl") or selected["default_base_url"])
+    current_provider = str(config.get("provider", "openai"))
+    # When switching provider, prefer that provider's default base URL.
+    if current_provider != selected["id"]:
+        default_base_url = selected["default_base_url"]
+    else:
+        default_base_url = str(config.get("baseUrl") or selected["default_base_url"])
     default_temperature = float(config.get("temperature", 0.7))
 
     model = _prompt_text("Model name", default=default_model)
