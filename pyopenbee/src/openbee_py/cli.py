@@ -97,28 +97,28 @@ def _interactive_config() -> int:
 
     selected = providers[selection - 1]
     default_model = str(config.get("model") or selected["default_model"])
-    default_base_url = str(config.get("base_url") or selected["default_base_url"])
+    default_base_url = str(config.get("baseUrl") or selected["default_base_url"])
     default_temperature = float(config.get("temperature", 0.7))
 
     model = _prompt_text("Model name", default=default_model)
     base_url = _prompt_text("Base URL", default=default_base_url)
-    api_key = _prompt_text("API Key", default=str(config.get("api_key", "")), secret=True)
+    api_key = _prompt_text("API Key", default=str(config.get("apiKey", "")), secret=True)
     api_secret = ""
     if selected["need_api_secret"]:
         api_secret = _prompt_text(
             "API Secret",
-            default=str(config.get("api_secret", "")),
+            default=str(config.get("apiSecret", "")),
             secret=True,
         )
     temperature = _prompt_float("Temperature", default=default_temperature)
 
     updated = update_llm_config(
         provider=selected["id"],
-        api_key=api_key,
-        api_secret=api_secret,
+        apiKey=api_key,
+        apiSecret=api_secret,
         model=model,
-        base_url=base_url,
-        api_style=selected["api_style"],
+        baseUrl=base_url,
+        apiStyle=selected["api_style"],
         temperature=temperature,
     )
     print("Configuration updated.")
@@ -143,11 +143,11 @@ def _run_config(args: argparse.Namespace) -> int:
     if has_updates:
         config = update_llm_config(
             provider=args.provider,
-            api_key=args.api_key,
-            api_secret=args.api_secret,
+            apiKey=args.api_key,
+            apiSecret=args.api_secret,
             model=args.model,
-            base_url=args.base_url,
-            api_style=args.api_style,
+            baseUrl=args.base_url,
+            apiStyle=args.api_style,
             temperature=args.temperature,
         )
         print("Configuration updated.")
@@ -167,11 +167,11 @@ def _run_ask(args: argparse.Namespace) -> int:
     config = load_config().get("llm", {})
     provider = args.provider or config.get("provider", "openai")
     provider_spec = get_provider(str(provider))
-    api_key = args.api_key or config.get("api_key", "")
-    api_secret = args.api_secret or config.get("api_secret", "")
+    api_key = args.api_key or config.get("apiKey", "")
+    api_secret = args.api_secret or config.get("apiSecret", "")
     model = args.model or config.get("model", "gpt-4o")
-    base_url = args.base_url or config.get("base_url", provider_spec["default_base_url"])
-    api_style = args.api_style or config.get("api_style", provider_spec["api_style"])
+    base_url = args.base_url or config.get("baseUrl", provider_spec["default_base_url"])
+    api_style = args.api_style or config.get("apiStyle", provider_spec["api_style"])
     temperature = args.temperature if args.temperature is not None else float(config.get("temperature", 0.7))
 
     if not api_key and provider != "ollama":

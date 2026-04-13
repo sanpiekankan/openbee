@@ -36,14 +36,14 @@ class TestOpenBeePyCli(unittest.TestCase):
                 )
                 self.assertEqual(code, 0)
                 config = load_config()
-                self.assertEqual(config["llm"]["api_key"], "test-key")
+                self.assertEqual(config["llm"]["apiKey"], "test-key")
                 self.assertEqual(config["llm"]["model"], "gpt-4o-mini")
                 self.assertTrue(get_config_path().exists())
 
     def test_ask_command_uses_client(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.dict(os.environ, {"OPENBEE_CONFIG_HOME": temp_dir}, clear=False):
-                update_llm_config(api_key="k", model="m", base_url="https://api.openai.com/v1")
+                update_llm_config(apiKey="k", model="m", baseUrl="https://api.openai.com/v1")
                 with patch("openbee_py.cli.ask_openbee", return_value="ok") as mocked:
                     buf = io.StringIO()
                     with redirect_stdout(buf):
@@ -71,8 +71,8 @@ class TestOpenBeePyCli(unittest.TestCase):
                     encoding="utf-8",
                 )
                 config = load_config()
-                self.assertEqual(config["llm"]["api_key"], "sk-test-legacy")
-                self.assertEqual(config["llm"]["base_url"], "https://api.moonshot.cn/v1")
+                self.assertEqual(config["llm"]["apiKey"], "sk-test-legacy")
+                self.assertEqual(config["llm"]["baseUrl"], "https://api.moonshot.cn/v1")
                 self.assertEqual(config["llm"]["model"], "kimi-k2.5")
 
     def test_ask_openbee_retries_with_temperature_one(self) -> None:

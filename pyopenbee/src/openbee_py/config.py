@@ -10,11 +10,11 @@ from typing import Any
 DEFAULT_CONFIG: dict[str, Any] = {
     "llm": {
         "provider": "openai",
-        "api_key": "",
-        "api_secret": "",
+        "apiKey": "",
+        "apiSecret": "",
         "model": "gpt-4o",
-        "base_url": "https://api.openai.com/v1",
-        "api_style": "openai_compatible",
+        "baseUrl": "https://api.openai.com/v1",
+        "apiStyle": "openai_compatible",
         "temperature": 0.7,
     }
 }
@@ -37,28 +37,32 @@ def _sanitize_text(value: Any) -> Any:
 
 
 def _normalize_llm_config(llm: dict[str, Any]) -> dict[str, Any]:
-    """Normalize legacy keys and sanitize user-entered config values."""
-    normalized = dict(llm)
-
-    legacy_aliases = {
-        "apiKey": "api_key",
-        "apiSecret": "api_secret",
-        "baseUrl": "base_url",
-        "apiStyle": "api_style",
+    """Normalize config keys to camelCase and sanitize user-entered values."""
+    normalized = copy.deepcopy(DEFAULT_CONFIG["llm"])
+    aliases = {
+        "provider": "provider",
+        "apiKey": "apiKey",
+        "api_key": "apiKey",
+        "apiSecret": "apiSecret",
+        "api_secret": "apiSecret",
+        "model": "model",
+        "baseUrl": "baseUrl",
+        "base_url": "baseUrl",
+        "apiStyle": "apiStyle",
+        "api_style": "apiStyle",
+        "temperature": "temperature",
     }
-    for old_key, new_key in legacy_aliases.items():
-        if old_key in normalized and normalized.get(old_key) not in (None, ""):
-            normalized[new_key] = normalized[old_key]
+    for old_key, canonical_key in aliases.items():
+        if old_key in llm and llm.get(old_key) not in (None, ""):
+            normalized[canonical_key] = llm[old_key]
 
-    for key in ("provider", "api_key", "api_secret", "model", "base_url", "api_style"):
-        if key in normalized:
-            normalized[key] = _sanitize_text(normalized[key])
+    for key in ("provider", "apiKey", "apiSecret", "model", "baseUrl", "apiStyle"):
+        normalized[key] = _sanitize_text(normalized.get(key, ""))
 
-    if "temperature" in normalized:
-        try:
-            normalized["temperature"] = float(normalized["temperature"])
-        except (TypeError, ValueError):
-            normalized["temperature"] = DEFAULT_CONFIG["llm"]["temperature"]
+    try:
+        normalized["temperature"] = float(normalized.get("temperature", DEFAULT_CONFIG["llm"]["temperature"]))
+    except (TypeError, ValueError):
+        normalized["temperature"] = DEFAULT_CONFIG["llm"]["temperature"]
 
     return normalized
 
@@ -95,6 +99,8 @@ def load_config() -> dict[str, Any]:
 
 def save_config(config: dict[str, Any]) -> None:
     """Persist config to disk as JSON."""
+    if isinstance(config.get("llm"), dict):
+        config["llm"] = _normalize_llm_config(config["llm"])
     path = get_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
