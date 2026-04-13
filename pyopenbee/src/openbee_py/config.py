@@ -20,6 +20,49 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
+def _sanitize_text(value: Any) -> Any:
+    """Trim whitespace and surrounding markdown/code quotes in string values."""
+    if not isinstance(value, str):
+        return value
+    cleaned = value.strip()
+    wrappers = (("`", "`"), ('"', '"'), ("'", "'"))
+    changed = True
+    while changed and cleaned:
+        changed = False
+        for left, right in wrappers:
+            if cleaned.startswith(left) and cleaned.endswith(right) and len(cleaned) >= 2:
+                cleaned = cleaned[1:-1].strip()
+                changed = True
+    return cleaned
+
+
+def _normalize_llm_config(llm: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy keys and sanitize user-entered config values."""
+    normalized = dict(llm)
+
+    legacy_aliases = {
+        "apiKey": "api_key",
+        "apiSecret": "api_secret",
+        "baseUrl": "base_url",
+        "apiStyle": "api_style",
+    }
+    for old_key, new_key in legacy_aliases.items():
+        if old_key in normalized and normalized.get(old_key) not in (None, ""):
+            normalized[new_key] = normalized[old_key]
+
+    for key in ("provider", "api_key", "api_secret", "model", "base_url", "api_style"):
+        if key in normalized:
+            normalized[key] = _sanitize_text(normalized[key])
+
+    if "temperature" in normalized:
+        try:
+            normalized["temperature"] = float(normalized["temperature"])
+        except (TypeError, ValueError):
+            normalized["temperature"] = DEFAULT_CONFIG["llm"]["temperature"]
+
+    return normalized
+
+
 def get_config_dir() -> Path:
     """Return the config directory path for OpenBee."""
     custom = os.getenv("OPENBEE_CONFIG_HOME")
@@ -46,6 +89,7 @@ def load_config() -> dict[str, Any]:
                 merged[key].update(value)
             else:
                 merged[key] = value
+    merged["llm"] = _normalize_llm_config(merged.get("llm", {}))
     return merged
 
 
@@ -63,5 +107,6 @@ def update_llm_config(**kwargs: Any) -> dict[str, Any]:
     for key, value in kwargs.items():
         if value is not None:
             llm[key] = value
+    config["llm"] = _normalize_llm_config(llm)
     save_config(config)
     return config

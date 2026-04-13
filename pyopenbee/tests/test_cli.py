@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -49,6 +50,29 @@ class TestOpenBeePyCli(unittest.TestCase):
                     self.assertEqual(code, 0)
                     self.assertIn("ok", buf.getvalue())
                     mocked.assert_called_once()
+
+    def test_load_config_supports_legacy_alias_and_sanitize(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"OPENBEE_CONFIG_HOME": temp_dir}, clear=False):
+                path = get_config_path()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    json.dumps(
+                        {
+                            "llm": {
+                                "provider": "kimi",
+                                "apiKey": "sk-test-legacy",
+                                "baseUrl": " `https://api.moonshot.cn/v1` ",
+                                "model": " `kimi-k2.5` ",
+                            }
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                config = load_config()
+                self.assertEqual(config["llm"]["api_key"], "sk-test-legacy")
+                self.assertEqual(config["llm"]["base_url"], "https://api.moonshot.cn/v1")
+                self.assertEqual(config["llm"]["model"], "kimi-k2.5")
 
 
 if __name__ == "__main__":
