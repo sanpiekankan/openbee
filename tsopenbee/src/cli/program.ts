@@ -1,16 +1,16 @@
 import { Command } from 'commander';
-import chalk from 'chalk';
 import { BeeRegistry } from '../bees/registry.js';
-import { Logger } from 'tslog';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as p from '@clack/prompts';
-import { ConfigManager } from '../config/manager.js';
+import {
+  ConfigManager,
+  DEFAULT_CONFIG,
+  LLMConfig,
+  ProviderSpec,
+} from '../config/manager.js';
 import { LLMClient } from '../infra/llm.js';
-import { Bee } from '../bees/bee.js';
-
-const logger = new Logger({ name: 'CLI' });
 const program = new Command();
 
 // Resolve package.json version
@@ -20,7 +20,126 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
 /**
  * Main entry point for the OpenBee CLI.
- * Busy as a Bee, Smart as AI, Automated for You.
+ * Build a list of provider options for select prompt.
+ */
+function buildProviderOptions(providers: ProviderSpec[]): Array<{ value: string; label: string }> {
+  return providers.map((provider) => ({
+    value: provider.id,
+    label: `${provider.label} [${provider.id}]`,
+  }));
+}
+
+/**
+ * Convert unknown value to trimmed string.
+ */
+function toText(input: unknown, fallback = ''): string {
+  const value = typeof input === 'string' ? input.trim() : '';
+  return value || fallback;
+}
+
+/**
+ * Parse unknown value to number with fallback.
+ */
+function toNumber(input: unknown, fallback: number): number {
+  const parsed = Number.parseFloat(String(input));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Run interactive config flow that mirrors pyopenbee behavior.
+ */
+async function runInteractiveConfig(): Promise<number> {
+  const config = (await ConfigManager.load()) ?? DEFAULT_CONFIG;
+  const providers = ConfigManager.listProviders();
+  const currentProvider = toText(config.llm.provider, 'openai');
+  const selectedProviderId = await p.select({
+    message: 'Select model provider:',
+    options: buildProviderOptions(providers),
+    initialValue: currentProvider,
+  });
+  if (p.isCancel(selectedProviderId)) {
+    p.cancel('Configuration cancelled.');
+    return 0;
+  }
+  const selectedProvider = ConfigManager.getProvider(String(selectedProviderId));
+  const switchingProvider = currentProvider !== selectedProvider.id;
+  const defaultModel = switchingProvider ? selectedProvider.defaultModel : toText(config.llm.model, selectedProvider.defaultModel);
+  const defaultBaseUrl = switchingProvider
+    ? selectedProvider.defaultBaseUrl
+    : toText(config.llm.baseUrl, selectedProvider.defaultBaseUrl);
+  const defaultTemperature = toNumber(config.llm.temperature, 0.7);
+
+  const model = await p.text({
+    message: 'Model name',
+    placeholder: defaultModel,
+    initialValue: defaultModel,
+  });
+  if (p.isCancel(model)) {
+    p.cancel('Configuration cancelled.');
+    return 0;
+  }
+  const baseUrl = await p.text({
+    message: 'Base URL',
+    placeholder: defaultBaseUrl,
+    initialValue: defaultBaseUrl,
+  });
+  if (p.isCancel(baseUrl)) {
+    p.cancel('Configuration cancelled.');
+    return 0;
+  }
+  const apiKey = await p.password({
+    message: 'API Key',
+    mask: '*',
+  });
+  if (p.isCancel(apiKey)) {
+    p.cancel('Configuration cancelled.');
+    return 0;
+  }
+  let apiSecret = '';
+  if (selectedProvider.needApiSecret) {
+    const secretInput = await p.password({
+      message: 'API Secret',
+      mask: '*',
+    });
+    if (p.isCancel(secretInput)) {
+      p.cancel('Configuration cancelled.');
+      return 0;
+    }
+    apiSecret = String(secretInput);
+  }
+  const temperature = await p.text({
+    message: 'Temperature',
+    placeholder: String(defaultTemperature),
+    initialValue: String(defaultTemperature),
+    validate(value) {
+      const parsed = Number.parseFloat(String(value ?? ''));
+      if (!Number.isFinite(parsed)) {
+        return 'Invalid number, please try again.';
+      }
+      return undefined;
+    },
+  });
+  if (p.isCancel(temperature)) {
+    p.cancel('Configuration cancelled.');
+    return 0;
+  }
+
+  const updated = await ConfigManager.updateLLMConfig({
+    provider: selectedProvider.id,
+    apiKey: String(apiKey),
+    apiSecret,
+    model: String(model),
+    baseUrl: String(baseUrl),
+    apiStyle: selectedProvider.apiStyle,
+    temperature: Number.parseFloat(String(temperature)),
+  });
+  console.log('Configuration updated.');
+  console.log(JSON.stringify(updated, null, 2));
+  return 0;
+}
+
+/**
+ * Main entry point for the OpenBee CLI.
  */
 export function run() {
   BeeRegistry.initDefaults();
@@ -32,168 +151,110 @@ export function run() {
 
   program
     .command('config')
-    .description('Configure the OpenBee hive (LLM setup)')
-    .action(async () => {
-      p.intro(chalk.yellow(`${chalk.bold('OpenBee Config')} 🐝`));
-
-      const config = await ConfigManager.load() || { llm: { provider: 'openai', model: 'gpt-4o', apiKey: '', baseUrl: '' } };
-
-      const setup = await p.group(
-        {
-          provider: () =>
-            p.select({
-              message: 'Select LLM Provider:',
-              options: [
-                { value: 'openai', label: 'OpenAI' },
-                { value: 'deepseek', label: 'DeepSeek' },
-                { value: 'qwen', label: 'Qwen (Aliyun)' },
-                { value: 'kimi', label: 'Kimi (Moonshot)' },
-                { value: 'zhipu', label: 'Zhipu AI (GLM)' },
-                { value: 'anthropic', label: 'Anthropic' },
-                { value: 'ollama', label: 'Ollama (Local)' },
-                { value: 'custom', label: 'Custom OpenAI-compatible' },
-              ],
-              initialValue: config.llm.provider,
-            }),
-          apiKey: ({ results }) =>
-            results.provider !== 'ollama'
-              ? p.text({
-                  message: `Enter ${results.provider} API Key:`,
-                  placeholder: 'your-api-key',
-                  initialValue: config.llm.apiKey,
-                })
-              : Promise.resolve(''),
-          baseUrl: ({ results }) => {
-            const defaults: Record<string, string> = {
-              deepseek: 'https://api.deepseek.com',
-              qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-              kimi: 'https://api.moonshot.cn/v1',
-              zhipu: 'https://open.bigmodel.cn/api/paas/v4/',
-              ollama: 'http://localhost:11434/v1',
-            };
-            const defaultUrl = defaults[results.provider as string] || '';
-            
-            if (results.provider === 'openai' || results.provider === 'anthropic') {
-              return Promise.resolve(defaultUrl);
-            }
-
-            return p.text({
-              message: 'Enter Base URL:',
-              placeholder: defaultUrl || 'https://api.your-provider.com/v1',
-              initialValue: config.llm.baseUrl || defaultUrl,
-            });
-          },
-          model: ({ results }) => {
-            const modelDefaults: Record<string, string> = {
-              deepseek: 'deepseek-chat', // or deepseek-reasoner
-              qwen: 'qwen-max',
-              kimi: 'kimi-k2.5',
-              zhipu: 'glm-4-plus',
-              openai: 'gpt-4o',
-            };
-            const placeholders: Record<string, string> = {
-              deepseek: 'deepseek-chat, deepseek-reasoner',
-              qwen: 'qwen-max, qwen-plus, qwen-turbo',
-              kimi: 'kimi-k2.5, moonshot-v1-8k, moonshot-v1-32k',
-              zhipu: 'glm-4-plus, glm-4-0520, glm-4',
-              openai: 'gpt-4o, gpt-4-turbo, gpt-3.5-turbo',
-            };
-            const defaultModel = modelDefaults[results.provider as string] || '';
-            const placeholder = placeholders[results.provider as string] || 'model-name';
-
-            return p.text({
-              message: 'Enter Model Name:',
-              placeholder: placeholder,
-              initialValue: config.llm.model || defaultModel,
-            });
-          },
-          temperature: ({ results }) => {
-            const model = (results.model as string) || '';
-            const defaultTemp = model.includes('k2.5') || model.includes('reasoner') ? '1.0' : '0.7';
-            return p.text({
-              message: 'Enter Temperature (0.0 - 2.0):',
-              placeholder: defaultTemp,
-              initialValue: config.llm.temperature?.toString() || defaultTemp,
-              validate: (value) => {
-                if (!value) return 'Please enter a value';
-                const num = parseFloat(value);
-                if (isNaN(num) || num < 0 || num > 2) return 'Please enter a number between 0 and 2';
-              }
-            });
-          },
-        },
-        {
-          onCancel: () => {
-            p.cancel('Configuration cancelled.');
-            process.exit(0);
-          },
-        }
-      );
-
-      await ConfigManager.save({
-        llm: {
-          provider: (setup.provider as string) || '',
-          apiKey: (setup.apiKey as string) || '',
-          model: (setup.model as string) || '',
-          baseUrl: (setup.baseUrl as string) || '',
-          temperature: parseFloat((setup.temperature as string) || '0.7'),
-        },
-      });
-
-      p.outro(chalk.green('Configuration saved successfully! Hive is ready to work. 🐝'));
+    .description('Show or update LLM config')
+    .option('--provider <provider>', 'LLM provider name')
+    .option('--api-key <apiKey>', 'LLM API key')
+    .option('--api-secret <apiSecret>', 'LLM API secret (if required)')
+    .option('--model <model>', 'LLM model name')
+    .option('--base-url <baseUrl>', 'OpenAI-compatible base URL')
+    .option('--api-style <apiStyle>', 'API style override')
+    .option('--temperature <temperature>', 'Sampling temperature')
+    .action(async (options: Record<string, unknown>) => {
+      const hasUpdates = [
+        options.provider,
+        options.apiKey,
+        options.apiSecret,
+        options.model,
+        options.baseUrl,
+        options.apiStyle,
+        options.temperature,
+      ].some((value) => value !== undefined);
+      if (hasUpdates) {
+        const updated = await ConfigManager.updateLLMConfig({
+          provider: options.provider ? String(options.provider) : undefined,
+          apiKey: options.apiKey ? String(options.apiKey) : undefined,
+          apiSecret: options.apiSecret ? String(options.apiSecret) : undefined,
+          model: options.model ? String(options.model) : undefined,
+          baseUrl: options.baseUrl ? String(options.baseUrl) : undefined,
+          apiStyle: options.apiStyle ? String(options.apiStyle) : undefined,
+          temperature:
+            options.temperature !== undefined ? Number.parseFloat(String(options.temperature)) : undefined,
+        } as Partial<LLMConfig>);
+        console.log('Configuration updated.');
+        console.log(JSON.stringify(updated, null, 2));
+        return;
+      }
+      await runInteractiveConfig();
     });
 
   program
     .command('list')
-    .description('List all available Bee roles in the Hive')
+    .description('List available bee roles')
     .action(() => {
       const roles = BeeRegistry.list();
-      console.log(chalk.yellow('\nAvailable Bee Roles in the Hive:'));
-      console.log(chalk.cyan('='.repeat(40)));
-      roles.forEach(role => {
-        console.log(`${chalk.bold(role.name)} (${chalk.gray(role.id)})`);
-        console.log(`  ${role.description}\n`);
+      roles.forEach((role) => {
+        console.log(`${role.name} (${role.id})`);
+        console.log(`  ${role.description}`);
       });
     });
 
   program
     .command('ask')
-    .description('Ask a specific Bee role to perform a task')
-    .argument('<role>', 'The ID of the bee role (e.g., worker, researcher)')
-    .argument('<task...>', 'The task or question for the bee')
-    .action(async (roleId, taskParts) => {
+    .description('Ask a role to perform a task')
+    .argument('<role>', 'Role id, e.g. worker')
+    .argument('<task...>', 'Task text')
+    .option('--provider <provider>', 'Override provider')
+    .option('--api-key <apiKey>', 'Override API key')
+    .option('--api-secret <apiSecret>', 'Override API secret')
+    .option('--model <model>', 'Override model')
+    .option('--base-url <baseUrl>', 'Override base URL')
+    .option('--api-style <apiStyle>', 'Override API style')
+    .option('--temperature <temperature>', 'Override temperature')
+    .action(async (roleId: string, taskParts: string[], options: Record<string, unknown>) => {
       const task = taskParts.join(' ');
       const role = BeeRegistry.get(roleId);
 
       if (!role) {
-        p.log.error(chalk.red(`Error: Bee role "${roleId}" not found in the Hive.`));
-        process.exit(1);
+        console.error(`Error: role "${roleId}" not found.`);
+        process.exitCode = 1;
+        return;
       }
 
-      const config = await ConfigManager.load();
-      if (!config || !config.llm || !config.llm.apiKey) {
-        p.log.error(chalk.red('Error: LLM not configured. Please run "openbee config" first.'));
-        process.exit(1);
-      }
+      const config = (await ConfigManager.load()) ?? DEFAULT_CONFIG;
+      const provider = toText(options.provider, config.llm.provider || 'openai');
+      const providerSpec = ConfigManager.getProvider(provider);
+      const merged: LLMConfig = {
+        provider,
+        apiKey: toText(options.apiKey, config.llm.apiKey),
+        apiSecret: toText(options.apiSecret, config.llm.apiSecret),
+        model: toText(options.model, config.llm.model || providerSpec.defaultModel),
+        baseUrl: toText(options.baseUrl, config.llm.baseUrl || providerSpec.defaultBaseUrl),
+        apiStyle: toText(options.apiStyle, config.llm.apiStyle || providerSpec.apiStyle),
+        temperature:
+          options.temperature !== undefined
+            ? toNumber(options.temperature, config.llm.temperature)
+            : toNumber(config.llm.temperature, 0.7),
+      };
 
-      const s = p.spinner();
-      s.start(chalk.green(`Summoning ${role.name} to work on: "${task}"...`));
+      if (!merged.apiKey && provider !== 'ollama') {
+        console.error('Error: API key missing. Run "openbee config" to set it first.');
+        process.exitCode = 1;
+        return;
+      }
+      if (providerSpec.needApiSecret && !merged.apiSecret) {
+        console.error(`Error: API secret missing for provider "${provider}". Run "openbee config" to set it first.`);
+        process.exitCode = 1;
+        return;
+      }
 
       try {
-        const llm = new LLMClient(config.llm);
-        const bee = new Bee(role, llm);
-        const response = await bee.think(task);
-
-        s.stop(chalk.cyan(`[${role.name}] has finished thinking.`));
-        
-        console.log(`\n${chalk.bold(role.name)}:`);
-        console.log(`${response}\n`);
-        
-        p.log.info(chalk.gray(`  Role: ${role.description}`));
-        p.log.info(chalk.gray(`  Skills: ${role.skills.join(', ')}`));
-      } catch (error: any) {
-        s.stop(chalk.red('The bee got confused or ran into an error.'));
-        p.log.error(chalk.red(`Error: ${error.message}`));
+        const llm = new LLMClient(merged);
+        const content = await llm.ask(role.systemPrompt, task);
+        console.log(content);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Error: ${message}`);
+        process.exitCode = 1;
       }
     });
 
