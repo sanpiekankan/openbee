@@ -2,3 +2,5 @@
 /dist
 /pyopenbee/dist
 /pyopenbee/src/openbee.egg-info
+/tsopenbee/node_modules
+/tsopenbee/dist
